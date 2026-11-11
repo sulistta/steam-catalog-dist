@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
-  "generated_unix": 1794400479,
+  "generated_unix": 1794425216,
   "minimum_app_version": "0.1.0",
   "catalog": {
-    "url": "https://github.com/sulistta/steam-catalog-dist/releases/download/catalog-43021253170-1/catalog.json.gz",
+    "url": "https://github.com/sulistta/steam-catalog-dist/releases/download/catalog-43087020878-1/catalog.json.gz",
     "size": 23162980,
-    "sha256": "676c1f96f35808574c498d3f6d2ec35b0d351453226091f8ff7bc273fb58d52d"
+    "sha256": "21da12122eae7fb7035e3c4c8b4e4b5abdf66c8261ceda004bd54d255f760ec0"
   },
   "counts": {
     "branches": 62287,
