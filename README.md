@@ -1,10 +1,14 @@
 # Steam catalog distribution
 
-This public repository is reserved for the update index, release downloads,
-component license information and corresponding sources for the independent
-Steam catalog application.
+This public repository hosts the signed update index and community catalog
+releases for an independent Steam catalog application.
 
-The application and its platform integrations are still in development. No
-installer, signed update index or catalog release is available yet. Windows and
-Linux releases will only be published after their respective compatibility and
+Catalog snapshots are available in [Releases](https://github.com/sulistta/steam-catalog-dist/releases).
+The [signed index](https://sulistta.github.io/steam-catalog-dist/index-v1.json)
+records the current snapshot and its integrity information. Catalog entries have
+not all been tested as installable or playable games.
+
+The application and platform integrations remain in development. No desktop
+installer or integration component is available here yet. Windows and Linux
+releases will only be published after their respective compatibility and
 recovery checks have passed.
