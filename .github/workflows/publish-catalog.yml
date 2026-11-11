@@ -1,0 +1,91 @@
+# YAML / catalog-release-workflow.yml / GitHub Actions / public catalog publication
+name: Publish signed catalog
+
+on:
+  push:
+    branches: [catalog-staging]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: publish-signed-catalog
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: staged
+      - name: Verify signature and catalog
+        id: verify
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, re, subprocess
+          from pathlib import Path
+          root = Path('staged')
+          raw = (root / 'index-v1.json').read_bytes()
+          signature = root / 'index-v1.sig'
+          if not 0 < len(raw) <= 1024 * 1024 or signature.stat().st_size != 64:
+              raise SystemExit('Invalid index or signature size')
+          key = bytes.fromhex('302a300506032b65700321005030d9383b0e26954898f56cc33f93026cae1c5dfcdb79cefebb38da9d1663bc')
+          tmp = Path(os.environ['RUNNER_TEMP'])
+          (tmp / 'catalog-public-key.der').write_bytes(key)
+          (tmp / 'catalog-signed-message').write_bytes(b'steam-catalog-index-v1\0' + raw)
+          subprocess.run(['openssl', 'pkeyutl', '-verify', '-pubin', '-keyform', 'DER', '-inkey', str(tmp / 'catalog-public-key.der'), '-rawin', '-in', str(tmp / 'catalog-signed-message'), '-sigfile', str(signature)], check=True)
+          index = json.loads(raw)
+          artifact = index['catalog']
+          match = re.fullmatch(r'https://github\.com/sulistta/steam-catalog-dist/releases/download/(catalog-[a-z0-9-]+)/catalog\.json\.gz', artifact['url'])
+          snapshot = root / 'catalog.json.gz'
+          digest = hashlib.sha256()
+          with snapshot.open('rb') as data:
+              for block in iter(lambda: data.read(1024 * 1024), b''):
+                  digest.update(block)
+          if index['schema_version'] != 1 or not match or snapshot.stat().st_size != artifact['size'] or digest.hexdigest() != artifact['sha256']:
+              raise SystemExit('Catalog does not match the signed index')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('tag=' + match.group(1) + '\n')
+          PY
+      - name: Publish release and verify the uploaded file
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.verify.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" staged/catalog.json.gz --repo "$GITHUB_REPOSITORY" --title "Catálogo comunitário" --notes "Snapshot do catálogo comunitário. Esta publicação contém somente dados; a compatibilidade dos componentes continua em validação." --latest=false
+          fi
+          mkdir -p "$RUNNER_TEMP/release-check"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern catalog.json.gz --dir "$RUNNER_TEMP/release-check"
+          cmp staged/catalog.json.gz "$RUNNER_TEMP/release-check/catalog.json.gz"
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: site
+      - name: Publish the signed index
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          old = Path('site/index-v1.json')
+          new = Path('staged/index-v1.json')
+          if old.exists() and json.loads(new.read_bytes())['generated_unix'] <= json.loads(old.read_bytes())['generated_unix']:
+              raise SystemExit('Refusing to replace the index with an older or identical publication')
+          PY
+          cp staged/index-v1.json staged/index-v1.sig site/
+          git -C site config user.name 'github-actions[bot]'
+          git -C site config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C site add index-v1.json index-v1.sig
+          git -C site commit -m 'Publish signed community catalog index' -m 'Assisted-by: Cindy (https://cindy.app)'
+          git -C site push origin HEAD:main
+          gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds" >/dev/null
